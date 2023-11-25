@@ -1,0 +1,116 @@
+version: '3'
+
+services:
+  redis:
+    image: redis
+    ports:
+      - 6379:6379
+    networks:
+      - shopNetwork
+  authenticationDB:
+    image: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 10
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - authenticationNetwork
+  authenticationDBMigration:
+    image: authenticationdbmigration:latest
+    environment:
+      - DATABASE_URL=authenticationDB
+    depends_on:
+      authenticationDB:
+        condition: service_healthy
+    networks:
+      - authenticationNetwork
+  authentication:
+    image: authentication
+    environment:
+      - DATABASE_URL=authenticationDB
+    ports:
+      - 5001:5001
+    depends_on:
+      - authenticationDBMigration
+    networks:
+      - authenticationNetwork
+  shopDB:
+    image: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      timeout: 10s
+      retries: 10
+    volumes:
+      - shopdata:/var/lib/mysql
+    networks:
+      - shopNetwork
+      - adminNetwork
+      - customerNetwork
+  shopDBMigration:
+    image: shopdbmigration:latest
+    environment:
+      - DATABASE_URL=shopDB
+      - REDIS_URL=redis
+    depends_on:
+      shopDB:
+        condition: service_healthy
+    networks:
+      - adminNetwork
+  customer:
+    image: customer
+    environment:
+      - DATABASE_URL=shopDB
+      - REDIS_URL=redis
+    ports:
+      - 5002:5002
+    depends_on:
+      - shopDBMigration
+    networks:
+      - customerNetwork
+  daemon:
+    image: daemon
+    environment:
+      - DATABASE_URL=shopDB
+      - REDIS_URL=redis
+    depends_on:
+      - shopDBMigration
+    networks:
+      - shopNetwork
+  storekeeper:
+    image: storekeeper
+    environment:
+      - DATABASE_URL=shopDB
+      - REDIS_URL=redis
+    ports:
+      - 5003:5003
+    depends_on:
+      - shopDBMigration
+    networks:
+      - shopNetwork
+  admin:
+    image: admin
+    environment:
+      - DATABASE_URL=shopDB
+      - REDIS_URL=redis
+    ports:
+      - 5004:5004
+    depends_on:
+      - shopDBMigration
+    networks:
+      - adminNetwork
+
+volumes:
+  dbdata:
+  shopdata:
+
+networks:
+  shopNetwork:
+  adminNetwork:
+  customerNetwork:
+  authenticationNetwork:
